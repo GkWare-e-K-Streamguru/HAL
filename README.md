@@ -25,10 +25,12 @@ The HAL documentation can be found inline in the corresponding header files.
 It has been written in doxygen style.
 
 ## Licensing
+![CC BY-NC 4.0 Logo](https://i.creativecommons.org/l/by-nc/4.0/88x31.png)
+
 This Open Source version of the HAL has been put under the CC BY-NC 4.0 license.
 You can learn from this code and you can use it in non-commercial projects if your documentation says that you do so. You can not use it for commercial software (without asking us first) and you can not claim that this is your own work.
 
-*If you ask* politely, we are also very likely to give (free) permission for pretty much every other use (unless you are Google,Apple,Microsoft, a political party or a government).
+*If you ask* politely, we are also very likely to give (free) permission for pretty much every other use (unless you are Google, Apple, Microsoft, Facebook, Oracle, Adobe, Bayer/Monsanto, Nestlé, a political party or a government).
 
 ## Contributing
 The copyrights for this package are held by [GkWare e.K.](https://www.gkware.com).
