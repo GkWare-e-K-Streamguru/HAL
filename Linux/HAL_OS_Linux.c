@@ -51,7 +51,7 @@ const char *GURU_GetPlatformInfo(GURU_PLATFORMINFO eInfoType)
 	case GURU_PI_CHIPTYPE:
 #ifdef __i386__
 		return "x86";
-#elif __IA64__
+#elif __amd64__
 		return "x64";
 #elif __mips__
 		return "Mips";
@@ -75,7 +75,7 @@ const char *GURU_GetPlatformInfo(GURU_PLATFORMINFO eInfoType)
 		sprintf(pszKernelString,"%s %s (%s)",un.sysname,un.release,un.version);
 		return pszKernelString;		
 	case GURU_PI_NUMCORES:
-		sprintf(pszNumCores, "%d", sysconf(_SC_NPROCESSORS_ONLN));
+		sprintf(pszNumCores, "%d", (int)sysconf(_SC_NPROCESSORS_ONLN));
 		return pszNumCores;
 	default:
 		assert(0);
@@ -441,5 +441,6 @@ void GURU_SetOSTime(time_t t)
 {
 	struct timeval tv;
 	tv.tv_sec = t;
+	tv.tv_usec = 0;
 	settimeofday(&tv, NULL);
 }
