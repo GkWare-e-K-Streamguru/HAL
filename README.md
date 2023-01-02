@@ -1,6 +1,6 @@
 # Open Source version of our HAL (Hardware Abstraction Layer) for Win32 and Linux
-Almost all of our projects are written against an hardware abstraction layer that has been ported to various compilers and target systems. This open source release contains implementations of several core modules for Windows (Win32) and Linux. These core modules include OS abstractions for threading and synchronization, filesystem I/O and networking.
-This repository does not contain everything we have but everything you should need to build our other open source releases for either Windows or Linux.
+Almost all of our projects are written against an hardware abstraction layer that has been ported to various compilers and target systems. This open source release contains implementations of several core modules for Windows and Linux. These core modules include OS abstractions for threading and synchronization, filesystem I/O and networking.
+This repository does not contain everything we have but everything you should need to build our other open source releases for either Windows or Linux for 32bit and 64bit target architectures.
 
 ## Other Chipset/OS ports beyond Windows and Linux
 Several other ports of this HAL exist and even for Windows there are multiple versions of several modules. For example, there is one Network API implementation for the Windows Sockets APIs and there is one implementation that talks to LWIP on a tun/tap driver. 
@@ -27,7 +27,7 @@ It has been written in doxygen style.
 ## Licensing
 ![CC BY-NC 4.0 Logo](https://i.creativecommons.org/l/by-nc/4.0/88x31.png)
 
-This Open Source version of the HAL has been put under the CC BY-NC 4.0 license.
+This open source version of the HAL has been put under the CC BY-NC 4.0 license.
 You can learn from this code and you can use it in non-commercial projects if your documentation says that you do so. You can not use it for commercial software (without asking us first) and you can not claim that this is your own work.
 
 *If you ask* politely, we are also very likely to give (free) permission for pretty much every other use (unless you are Google, Apple, Microsoft, Facebook, Oracle, Adobe, Bayer/Monsanto, Nestlé, a political party or a government).
