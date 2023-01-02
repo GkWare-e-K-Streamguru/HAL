@@ -30,14 +30,26 @@ extern "C" {
 //! 
 //@{
 
+#ifdef __amd64__
+typedef int FILE_HANDLE;			//!< a file handle
+#define INVALID_FILE_HANDLE 0		//!< returned by #FSYS_Open in case of an error
+#else
 typedef void* FILE_HANDLE;			//!< a file handle
 #define INVALID_FILE_HANDLE NULL	//!< returned by #FSYS_Open in case of an error
+#endif
 
 #if _FILE_OFFSET_BITS == 64
 typedef QWORD FILESIZE_TYPE;		//!< 64bit file size supported
 #else
 typedef DWORD FILESIZE_TYPE;		//!< only 32bit file size (~4GB)
 #endif
+
+//! FSYS_OPEN_MODE contains the possible modes for opening a file using FSYS_Open
+typedef enum {
+	FSYS_READONLY = 0,
+	FSYS_READWRITE = 1,
+	FSYS_APPEND = 2
+} FSYS_OPEN_MODE;
 
 //! FSYS_FILEPOS_MODE contains the possible modes of a seek operation
 typedef enum {
@@ -51,7 +63,7 @@ typedef enum {
 //! @param pszFName Name of the file
 //! @param fWriteAccess TRUE for write-access. If this parameter is TRUE and the file does not exist, it will be created. FALSE for read-only access.
 //! @return A new file handle or INVALID_FILE_HANDLE in case of an error
-FILE_HANDLE FSYS_Open(const char *pszFName, BOOL fWriteAccess);
+FILE_HANDLE FSYS_Open(const char *pszFName, FSYS_OPEN_MODE eOpenMode);
 
 //! FSYS_Read reads data from a file
 //! @param hFile File handle opened using #FSYS_Open
@@ -167,6 +179,11 @@ void  FSYSUtil_FreeBuffer(BYTE *pBuf);
 //! if the entire operation was successful.
 BOOL FSYSUtil_WriteFile(const char *pszFile, const BYTE *pBuffer, DWORD dwLen);
 
+//! prototype for the callback invoked by FSYSUtil_ProcessFileByLine.
+//! @param pCookie Context pointer
+//! @param pszLine Line buffer. Intentionally not const to allow use of strtok etc.
+//! @return TRUE if the line was processed correctly. Returning FALSE at any point
+//!			immediately interrupts processing and causes FSYSUtil_ProcessFileByLine to return FALSE as well.
 typedef BOOL (LINEPROCESSINGCALLBACK)(void *pCookie, char *pszLine);
 
 BOOL FSYSUtil_ProcessFileByLine(const char *pszFile, void *pCookie, LINEPROCESSINGCALLBACK CB);

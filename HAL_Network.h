@@ -25,8 +25,11 @@ extern "C" {
 //! @file HAL_Network.h
 //! @brief This file contains the API for a BSD-socket like networking API
 
-
-typedef int NETAPI_SOCKET;
+#ifdef __amd64__
+typedef long NETAPI_SOCKET;		// this needs to have the size of a pointer for some TLS-related type casts
+#else
+typedef int NETAPI_SOCKET;		// this is the "original" BSD type
+#endif
 #define INVALID_SOCKET_HANDLE -1
 
 
@@ -35,7 +38,11 @@ typedef int NETAPI_SOCKET;
 #endif
 
 #ifndef AF_INET6
-#ifndef ENABLE_LWIP
+#ifdef ENABLE_LWIP
+#ifdef LWIP_IPV6
+#define AF_INET6 10		// Warning: LWIP uses a different value
+#endif
+#else
 #define AF_INET6 23		// Warning: LWIP uses a different value
 #endif
 #endif
@@ -53,6 +60,10 @@ typedef int NETAPI_SOCKET;
 #define IPPROTO_IP		0
 #endif
 
+#ifndef IPPROTO_IPV6
+#define IPPROTO_IPV6	41
+#endif
+
 #ifndef IPPROTO_TCP
 #define IPPROTO_TCP		6
 #endif
@@ -62,7 +73,11 @@ typedef int NETAPI_SOCKET;
 #endif
 
 #ifndef INADDR_ANY
-#define INADDR_ANY 0
+#define INADDR_ANY		0
+#endif
+
+#ifndef INADDR_NONE
+#define INADDR_NONE		 0xFFFFFFFF
 #endif
 
 #ifndef INADDR_BROADCAST
@@ -112,6 +127,12 @@ typedef struct NETAPI_ip_mreq {
     DWORD imr_multiaddr; // IP multicast address of group
     DWORD imr_interface; // local IP address of interface
 } NETAPI_ip_mreq;
+
+typedef struct NETAPI_ipv6_mreq {
+	BYTE			ipv6mr_multiaddr[16];	// IPv6 multicast address
+    //struct in6_addr ipv6mr_multiaddr;  
+    unsigned int    ipv6mr_interface;  // Interface index
+} NETAPI_ipv6_mreq;
 
 #ifndef HTONL_DEFINED
 unsigned short htons(unsigned short s);
@@ -287,12 +308,21 @@ BOOL NETAPI_GetHostByName(const char *pszHostName, NETAPI_sockaddr_in *pAddrOut,
 //! @return On success, the function returns zero. A negative value is returned in case of an error.
 int NETAPI_setsockopt(NETAPI_SOCKET s, int level, int optname, void *optval, int optlen);
 
+//! NETAPI_getsockname gets the local address of a socket
+//! @param s A valid socket handle
+//! @param pAddrOut Output pointer for the address.
+//! @return On success, the function returns zero. A negative value is returned in case of an error.
+int NETAPI_getsockname(NETAPI_SOCKET s, NETAPI_sockaddr_in *pAddrOut);
 
 // ******************************************
 //   Platform-Independent HAL_Media Utils
 BOOL NETAPI_HALUtil_IsMulticastAddress(const NETAPI_sockaddr_in *pAddr);
 
 #ifdef __cplusplus
+
+bool NETAPI_HALUTIL_InetNToA(const NETAPI_sockaddr_in &addr, char *pszOut, bool fIncludePort = false);
+bool NETAPI_HALUTIL_ParseIPArg(const char *pszArg, const char *pszPrefix, NETAPI_sockaddr_in &addr);
+
 }
 #endif
 

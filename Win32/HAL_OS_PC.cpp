@@ -13,6 +13,41 @@
 #include "all.h"
 
 
+void PrintHexDump(const void *pAddr2, const DWORD dwLen)
+{
+	DWORD i,j;
+	const BYTE *pAddr = (const BYTE *)pAddr2;
+	
+	for(i=0;i<dwLen;i+=16)
+	{
+#ifdef __amd64__
+		UART_printf("%016llx:",(unsigned long long)(pAddr+i));
+#else
+		UART_printf("%08X:",(unsigned int)(pAddr+i));
+#endif
+		for(j=0;j<16;j++) {
+			if(i+j<dwLen)
+				UART_printf("%02X ",(unsigned int)pAddr[i+j]);
+			else
+				UART_printf("   ");
+		}
+		for(j=0;j<16;j++) 
+		{
+			if(i+j<dwLen) {
+				BYTE c;
+				c = pAddr[i+j];
+				if(c>32)
+					UART_printf("%c",c);
+				else
+					UART_printf(".");
+			} else 
+				UART_printf(" ");
+		}
+		UART_printf("\r\n");
+	}
+}
+
+
 typedef struct tagTHREADNAME_INFO
 {
 	DWORD dwType; // must be 0x1000
@@ -80,7 +115,7 @@ static int GetWin32Priority(TASK_PRIORITY ePrio)
 static void GURU_TaskStarter(void *pArgument)
 {
 	TASKSTARTER_ARG *pThreadStarterArg = (TASKSTARTER_ARG*)pArgument;
-	DWORD TaskStartMsg[4];
+	HAL_QUEUE_MSGTYPE TaskStartMsg[4];
 	pArgument = pThreadStarterArg->pArgument;
 	TASKSTARTFUNC pFunc = pThreadStarterArg->pFunc;
 	SetThreadPriority(GetCurrentThread(), GetWin32Priority(pThreadStarterArg->ePrio));
@@ -99,7 +134,7 @@ TASK_HANDLE GURU_CreateTaskNamed(TASKSTARTFUNC pFunc,TASK_PRIORITY Prio, DWORD d
 {
 	DWORD hThread;
 	TASKSTARTER_ARG *pThreadStarterArg = (TASKSTARTER_ARG*)malloc(sizeof(TASKSTARTER_ARG));
-	DWORD TaskStartMsg[4];
+	HAL_QUEUE_MSGTYPE TaskStartMsg[4];
 
 	UNUSED_PARAMETER(dwStackSize);
 
@@ -141,7 +176,7 @@ TASK_HANDLE GURU_ThisTask(void)
 
 void GURU_DeleteTask(TASK_HANDLE hTask)
 {
-	
+	UNUSED_PARAMETER(hTask);
 }
 
 void GURU_Delay(DWORD dwTicks)
@@ -312,7 +347,7 @@ QUEUE_HANDLE GURU_CreateQueue(DWORD dwMaxCount)
 }
 
 
-int GURU_QueueRecv(QUEUE_HANDLE hQueue,DWORD msg[4],DWORD dwWaitTicks)
+int GURU_QueueRecv(QUEUE_HANDLE hQueue, HAL_QUEUE_MSGTYPE msg[4],DWORD dwWaitTicks)
 {
 	DWORD dwRet;
 	if(!hQueue)
@@ -331,14 +366,15 @@ int GURU_QueueRecv(QUEUE_HANDLE hQueue,DWORD msg[4],DWORD dwWaitTicks)
 	if(dwRet == WAIT_FAILED)
 		return GURU_QUEUE_EMPTY;
 	assert(dwRet == WAIT_OBJECT_0);
-	memcpy(msg,hQueue->pData,4*sizeof(DWORD));
+	memcpy(msg,hQueue->pData,4*sizeof(HAL_QUEUE_MSGTYPE));
 	hQueue->dwMsgNum--;
 	if(hQueue->dwMsgNum)
-		memmove(hQueue->pData,hQueue->pData+4,4*sizeof(DWORD)*hQueue->dwMsgNum);
+		memmove(hQueue->pData,hQueue->pData+4,4*sizeof(HAL_QUEUE_MSGTYPE)*hQueue->dwMsgNum);
 	ReleaseMutex(hQueue->hMutex);
 	return GURU_QUEUE_OK;
 }
-int GURU_QueueTryRecv(QUEUE_HANDLE hQueue,DWORD msg[4])
+
+int GURU_QueueTryRecv(QUEUE_HANDLE hQueue, HAL_QUEUE_MSGTYPE msg[4])
 {
 	DWORD dwRet;
 	if(!hQueue)
@@ -350,14 +386,15 @@ int GURU_QueueTryRecv(QUEUE_HANDLE hQueue,DWORD msg[4])
 		return GURU_QUEUE_EMPTY;
 	if(WaitForSingleObject(hQueue->hMutex,INFINITE) == WAIT_ABANDONED)
 		return GURU_QUEUE_EMPTY;
-	memcpy(msg,hQueue->pData,4*sizeof(DWORD));
+	memcpy(msg,hQueue->pData,4*sizeof(HAL_QUEUE_MSGTYPE));
 	hQueue->dwMsgNum--;
 	if(hQueue->dwMsgNum)
-		memmove(hQueue->pData,hQueue->pData+4,4*sizeof(DWORD)*hQueue->dwMsgNum);
+		memmove(hQueue->pData,hQueue->pData+4,4*sizeof(HAL_QUEUE_MSGTYPE)*hQueue->dwMsgNum);
 	ReleaseMutex(hQueue->hMutex);
 	return GURU_QUEUE_OK;
 }
-int GURU_QueueSend(QUEUE_HANDLE hQueue, const DWORD msg[4])
+
+int GURU_QueueSend(QUEUE_HANDLE hQueue, const HAL_QUEUE_MSGTYPE msg[4])
 {
 	if(!hQueue)
 		return GURU_QUEUE_FULL;
@@ -366,7 +403,7 @@ int GURU_QueueSend(QUEUE_HANDLE hQueue, const DWORD msg[4])
 		ReleaseMutex(hQueue->hMutex);
 		return GURU_QUEUE_FULL;
 	}
-	memcpy(hQueue->pData+4*hQueue->dwMsgNum,msg,4*sizeof(DWORD));
+	memcpy(hQueue->pData+4*hQueue->dwMsgNum,msg,4*sizeof(HAL_QUEUE_MSGTYPE));
 	hQueue->dwMsgNum++;
 	ReleaseSemaphore(hQueue->hSema,1,NULL);
 	ReleaseMutex(hQueue->hMutex);
@@ -407,4 +444,24 @@ DWORD GURU_GetTickCount()
 void GURU_SetOSTime(time_t t)
 {
 	// intentionally ignored. We only do this on embedded targets without buffered RTC.
+	UNUSED_PARAMETER(t);
+}
+
+BOOL GURU_GenerateRandom(BYTE *pOut, size_t size)
+{
+#pragma comment(lib, "Advapi32.lib")
+	HCRYPTPROV hCryptProv = 0;
+	
+	if (!CryptAcquireContextW(&hCryptProv, 0, 0, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT | CRYPT_SILENT)) {
+		assert(0);
+		return FALSE;
+	}
+
+	if (!CryptGenRandom(hCryptProv, size, pOut)) {
+		assert(0);
+		CryptReleaseContext(hCryptProv, 0);
+		return FALSE;
+	}
+	CryptReleaseContext(hCryptProv, 0);
+	return TRUE;
 }

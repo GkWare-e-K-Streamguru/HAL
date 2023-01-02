@@ -24,7 +24,7 @@ BYTE *FSYSUtil_LoadFile(const char *pszFile, FILESIZE_TYPE *pdwOutLen)
 	if(!pszFile || !pdwOutLen)
 		return NULL;
 
-	hFile = FSYS_Open(pszFile, FALSE);
+	hFile = FSYS_Open(pszFile, FSYS_READONLY);
 	if(hFile == INVALID_FILE_HANDLE) {
 		// UART_printf("File not found\r\n");
 		return NULL;
@@ -36,13 +36,13 @@ BYTE *FSYSUtil_LoadFile(const char *pszFile, FILESIZE_TYPE *pdwOutLen)
 		return NULL;
 	}
 
-	pBuf = (BYTE*)malloc(*pdwOutLen+1); // +1 for terminating zero
+	pBuf = (BYTE*)malloc((size_t)*pdwOutLen+1); // +1 for terminating zero
 	assert(pBuf);
 	if(!pBuf) {
 		FSYS_Close(hFile);
 		return NULL;
 	}
-	if(FSYS_Read(hFile, pBuf, *pdwOutLen) != (int)(*pdwOutLen)) {
+	if(FSYS_Read(hFile, pBuf, (DWORD)*pdwOutLen) != (int)(*pdwOutLen)) {
 		// UART_printf("File %s read error\r\n", pszFile);
 		free(pBuf);
 		return NULL;
@@ -65,7 +65,7 @@ BOOL FSYSUtil_ProcessFileByLine(const char *pszFile, void *pCookie, LINEPROCESSI
 {
 	FILESIZE_TYPE dwLen;
 	BYTE *pFileBuf = FSYSUtil_LoadFile(pszFile, &dwLen);
-	assert(pFileBuf);
+	//assert(pFileBuf); // it is legitimate to call this when the file does not exist, fires annoyingly in EPGTX project
 	if(!pFileBuf)
 		return FALSE;
 	
@@ -95,7 +95,7 @@ BOOL FSYSUtil_ProcessFileByLine(const char *pszFile, void *pCookie, LINEPROCESSI
 
 BOOL FSYSUtil_WriteFile(const char *pszFile, const BYTE *pBuffer, DWORD dwLen)
 {
-	FILE_HANDLE hFile = FSYS_Open(pszFile, TRUE);
+	FILE_HANDLE hFile = FSYS_Open(pszFile, FSYS_READWRITE);
 	if(hFile == INVALID_FILE_HANDLE)
 		return FALSE;
 	DWORD dwWritten = FSYS_Write(hFile, pBuffer, dwLen);

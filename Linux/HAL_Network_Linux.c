@@ -293,7 +293,7 @@ static void SetDNS(DWORD dwNS1,DWORD dwNS2)
 	if(dwNS2)
 		sprintf(pszBuf+strlen(pszBuf),"nameserver %s\n",inet_ntoa(ns2));
 
-	int hFile = open("/etc/resolv.conf", O_RDWR | O_CREAT | O_TRUNC);
+	int hFile = open("/etc/resolv.conf", S_IRUSR|S_IWUSR, O_RDWR | O_CREAT | O_TRUNC);
 	assert(hFile != -1);
 	if(hFile == -1)
 		return;
@@ -329,19 +329,57 @@ NETAPI_SOCKET NETAPI_socket(int af, int type, int protocol)
 }
 int NETAPI_bind(NETAPI_SOCKET s, const NETAPI_sockaddr_in *pAddr)
 {
-	struct sockaddr_in addr;
-	addr.sin_family = AF_INET;
-	addr.sin_port = pAddr->sin_port;
-	addr.sin_addr.s_addr = pAddr->sin_addr.S_un.S_addr;
-	return bind(s,(struct sockaddr*)&addr,sizeof(struct sockaddr_in));
+	//UART_printf("NETAPI_bind\r\n");
+	switch(pAddr->sin_family)
+	{
+	case AF_INET:
+		{
+		struct sockaddr_in addr4;
+		addr4.sin_family = pAddr->sin_family;
+		addr4.sin_port = pAddr->sin_port;
+		addr4.sin_addr.s_addr = pAddr->sin_addr.S_un.S_addr;
+		return bind(s, (struct sockaddr*)&addr4,  sizeof(struct sockaddr_in));
+		}
+#ifdef ENABLE_NETAPI_IPV6
+	case AF_INET6:
+		{
+		struct sockaddr_in6 addr6;
+		addr6.sin6_family = pAddr->sin_family;
+		addr6.sin6_port = pAddr->sin_port;
+		memcpy(addr6.sin6_addr.s6_addr, pAddr->sin_addr.S_un.bIPv6Data,  sizeof(pAddr->sin_addr.S_un.bIPv6Data));
+		return bind(s,(struct sockaddr*)&addr6,sizeof(struct sockaddr_in6));
+		}
+#endif
+	default:
+		return -1;
+	}
 }
+
 int NETAPI_connect(NETAPI_SOCKET s, const NETAPI_sockaddr_in *pAddr)
 {
-	struct sockaddr_in addr;
-	addr.sin_family = AF_INET;
-	addr.sin_port = pAddr->sin_port;
-	addr.sin_addr.s_addr = pAddr->sin_addr.S_un.S_addr;
-	return connect(s,(struct sockaddr*)&addr,sizeof(struct sockaddr_in));
+	switch(pAddr->sin_family)
+	{
+	case AF_INET:
+		{
+		struct sockaddr_in addr4;
+		addr4.sin_family = pAddr->sin_family;
+		addr4.sin_port = pAddr->sin_port;
+		addr4.sin_addr.s_addr = pAddr->sin_addr.S_un.S_addr;
+		return connect(s, (struct sockaddr*)&addr4, sizeof(struct sockaddr_in));
+		}
+#ifdef ENABLE_NETAPI_IPV6
+	case AF_INET6:
+		{
+		struct sockaddr_in6 addr6;
+		addr6.sin6_family = pAddr->sin_family;
+		addr6.sin6_port = pAddr->sin_port;
+		memcpy(addr6.sin6_addr.s6_addr, pAddr->sin_addr.S_un.bIPv6Data, sizeof(pAddr->sin_addr.S_un.bIPv6Data));
+		return connect(s, (struct sockaddr*)&addr6, sizeof(struct sockaddr_in6));
+		}
+#endif
+	default:
+		return -1;
+	}
 }
 
 int NETAPI_listen(NETAPI_SOCKET s, int backlog)
@@ -349,15 +387,44 @@ int NETAPI_listen(NETAPI_SOCKET s, int backlog)
 	return listen(s, backlog);
 }
 
-NETAPI_SOCKET NETAPI_accept(NETAPI_SOCKET s, NETAPI_sockaddr_in *paddr)
+NETAPI_SOCKET NETAPI_accept(NETAPI_SOCKET s, NETAPI_sockaddr_in *pAddr)
 {
-	int nAddrLen = sizeof(struct sockaddr_in);
+	union {
 	struct sockaddr_in addr;
-	addr.sin_family = AF_INET;
-	NETAPI_SOCKET s2 = accept(s, (struct sockaddr*)&addr,(socklen_t*)&nAddrLen);
-	if(paddr) {
-		paddr->sin_port = addr.sin_port;
-		paddr->sin_addr.S_un.S_addr = addr.sin_addr.s_addr;
+	struct sockaddr_in6 addr6;
+	}u;
+	int nAddrLen = max(sizeof(struct sockaddr_in),sizeof(struct sockaddr_in6));
+	if(pAddr)
+		u.addr.sin_family = pAddr->sin_family;
+	else
+		u.addr.sin_family = 0;
+
+	NETAPI_SOCKET s2 = accept(s, (struct sockaddr*)&u.addr,(socklen_t*)&nAddrLen);
+	//UART_printf("NETAPI_accept returned new socket %d\r\n",s2);
+	if(pAddr) {
+		pAddr->sin_family = u.addr.sin_family;
+		switch(u.addr.sin_family)
+		{
+		case AF_INET:
+			{
+			struct sockaddr_in *pAddr4 = (struct sockaddr_in*)&u.addr;
+			pAddr->sin_port = pAddr4->sin_port;
+			pAddr->sin_addr.S_un.S_addr = pAddr4->sin_addr.s_addr;
+			}
+			break;
+#ifdef ENABLE_NETAPI_IPV6
+		case AF_INET6:
+			{
+			struct sockaddr_in6 *pAddr6 = (struct sockaddr_in6*)&u.addr6;
+			pAddr->sin_port = pAddr6->sin6_port;
+			memcpy(pAddr->sin_addr.S_un.bIPv6Data, pAddr6->sin6_addr.s6_addr, sizeof(pAddr->sin_addr.S_un.bIPv6Data));
+			}
+			break;
+#endif
+		default:
+			assert(0);
+			break;
+		}
 	}
 	return s2;
 }
@@ -370,11 +437,14 @@ int NETAPI_send(NETAPI_SOCKET s, const void *buf, int len)
 int NETAPI_sendto(NETAPI_SOCKET s, const void *buf, int len, const NETAPI_sockaddr_in *to)
 {
 	int ret;
+	assert(to);
+
 	struct sockaddr_in addr;
 	memset(&addr, 0x00, sizeof(addr));
-	assert(to);
-	addr.sin_family = AF_INET;
+	//UART_printf("NETAPI_sendto %d %08X %d\r\n",s,to->sin_addr.S_un.S_addr,to->sin_port);
+	addr.sin_family = to->sin_family;
 	addr.sin_port = to->sin_port;
+	// **TODO** IPv6
 	addr.sin_addr.s_addr = to->sin_addr.S_un.S_addr;
 
 	if(to->sin_addr.S_un.S_addr == INADDR_BROADCAST) {
@@ -400,7 +470,7 @@ int NETAPI_recvfrom(NETAPI_SOCKET s, void* buf, int len, NETAPI_sockaddr_in *fro
 	int ret;
 	int nFromLen = sizeof(struct sockaddr_in);
 	struct sockaddr_in addr;
-	addr.sin_family = AF_INET;
+	addr.sin_family = from->sin_family;
 	ret = recvfrom(s,buf,len,0,(struct sockaddr*)&addr,(socklen_t*)&nFromLen);
 	from->sin_port = addr.sin_port;
 	from->sin_addr.S_un.S_addr = addr.sin_addr.s_addr;
@@ -423,13 +493,19 @@ BOOL NETAPI_SetConfiguration(int nIfIndex, NETAPI_CONFIG eCfgVal, void *pData)
 	struct ifreq ifr;
 	DWORD *pdwAddr = (DWORD *)pData;
 	BYTE *pAddr = (BYTE *)pData;
+	//NETAPI_LINK_STATE *pLinkState = (NETAPI_LINK_STATE *)pData;
 	BOOL *pBOOL = (BOOL*)pData;
 	int ret;
 	int s;
 
     NETAPI_DEBUG(("NETAPI_SetConfiguration %d, %s, %08X\r\n", nIfIndex, NETAPI_Config2Text(eCfgVal), pData));
+#ifdef ENABLE_WLAN
+	if(nIfIndex>1)
+		return FALSE;
+#else
 	if(nIfIndex>0)
 		return FALSE;
+#endif
 
 #ifdef PLATFORM_LINUX // we do not want to reconfigure the build&test VM
 	return FALSE;
@@ -437,6 +513,18 @@ BOOL NETAPI_SetConfiguration(int nIfIndex, NETAPI_CONFIG eCfgVal, void *pData)
 
 	memset(&ifr, 0, sizeof(ifr));
 	strcpy(ifr.ifr_name, "eth0");
+#ifdef ENABLE_WLAN
+	if(nIfIndex==1) {
+		strcpy(ifr.ifr_name, "wlan0");
+
+		static BOOL fWiFiStarted = false;
+		if(!fWiFiStarted) {
+			fWiFiStarted = true;
+			_wpa_ctrl_command("ADD_NETWORK",0, NULL);
+			_wpa_ctrl_command("ENABLE_NETWORK 0",0, NULL);
+		}
+	}
+#endif
 	
 	switch(eCfgVal)
 	{
@@ -522,7 +610,7 @@ BOOL NETAPI_SetConfiguration(int nIfIndex, NETAPI_CONFIG eCfgVal, void *pData)
 		SetDNS(GetDNS(0),*pdwAddr);
 		return TRUE;
 	case NETCFG_LINKSTATE:	//!< #NETAPI_LINK_STATE, read-only link state, if supported by hardware driver
-		return; // read-only
+		return FALSE; // read-only
 	case NETCFG_CONNECTTO:	//!< DWORD global approximate connect timeout in seconds, if supported by network stack
 		break;
 	}
@@ -604,20 +692,59 @@ BOOL NETAPI_GetConfiguration(int nIfIndex, NETAPI_CONFIG eCfgVal, void *pData)
 
 BOOL NETAPI_GetHostByName(const char *pszHostName, NETAPI_sockaddr_in *pAddrOut, short family)
 {
-	//UART_printf("NETAPI_GetHostByName dummy\r\n");
+	//UART_printf("NETAPI_GetHostByName %s\r\n", pszHostName);
 	assert(pszHostName);
 	if(!pszHostName)
 		return FALSE;
-	struct hostent *he = gethostbyname(pszHostName);
+	struct hostent *he;
+	if(pszHostName[0]=='[') {
+		pszHostName++;
+		char *pCopy = strdup(pszHostName);
+		assert(pCopy);
+		if(!pCopy)
+			return FALSE;
+		if(strchr(pCopy,']'))
+			*strchr(pCopy,']') = 0;
+		he = gethostbyname2(pCopy, AF_INET6);
+		free(pCopy);
+	} else {
+		//he = gethostbyname(pszHostName);
+		he = gethostbyname2(pszHostName, AF_INET);
+		if(!he)
+			he = gethostbyname2(pszHostName, AF_INET6);
+	}
+	//printf("Returned %p\r\n",he);
 	if(!he)
 		return FALSE;
 	if(!he->h_addr_list)
 		return FALSE;
+
+
 	DWORD *pAddr = (DWORD*)*he->h_addr_list;
 
-	// **TODO** IPv6
-	pAddrOut->sin_family = AF_INET;
-	pAddrOut->sin_addr.S_un.S_addr = *pAddr;
+	pAddrOut->sin_port = 0;
+	pAddrOut->sin_family = he->h_addrtype;
+	switch(he->h_addrtype)
+	{
+	case AF_INET:
+		{
+		pAddrOut->sin_addr.S_un.S_addr = *pAddr;//addr4->s_addr;
+		//UART_printf("INET 4 %08X\r\n",pAddrOut->sin_addr.S_un.S_addr);
+		}
+		break;
+#ifdef ENABLE_NETAPI_IPV6
+	case AF_INET6:
+		{
+		//UART_printf("INET 6\r\n");
+		struct sockaddr_in6 *addr6 = (struct sockaddr_in6 *)he->h_addr_list[0];
+		memcpy(pAddrOut->sin_addr.S_un.bIPv6Data, he->h_addr_list[0], sizeof(pAddrOut->sin_addr.S_un.bIPv6Data));
+		}
+		break;
+#endif
+	default:
+		assert(0);
+		break;
+	}
 	return TRUE;
 }
 
@@ -647,6 +774,9 @@ int NETAPI_setsockopt(NETAPI_SOCKET s, int level, int optname, void *optval, int
 		mreq.imr_multiaddr.s_addr = pnmreq->imr_multiaddr;
 		return setsockopt(s, level, optname, &mreq, sizeof(mreq));
 	} else if((level==IPPROTO_IP) && (optname==IP_MULTICAST_TTL))
+	{
+		return setsockopt(s, level, optname, optval, optlen);
+	} else if((level==IPPROTO_IPV6) && (optname==IP_MULTICAST_TTL))
 	{
 		return setsockopt(s, level, optname, optval, optlen);
 	} else if((level==SOL_SOCKET) && (optname==SO_REUSEADDR))

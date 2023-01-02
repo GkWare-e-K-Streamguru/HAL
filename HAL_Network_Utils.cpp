@@ -22,10 +22,12 @@ BOOL NETAPI_HALUtil_IsMulticastAddress(const NETAPI_sockaddr_in *pAddr)
 	if((pAddr->sin_family == AF_INET) && (pAddr->sin_addr.S_un.S_un_b.s_b1>=224) && (pAddr->sin_addr.S_un.S_un_b.s_b1<=239)) {
         return true;
     }
-#ifdef AF_INET6
-	if((pAddr->sin_family == AF_INET6)) {		
-		assert(0); // **TODO**
-        return FALSE;
+#ifdef ENABLE_NETAPI_IPV6
+	// see https://en.wikipedia.org/wiki/Multicast_address#Notable_IPv6_multicast_addresses
+	// "Multicast addresses in IPv6 use the prefix ff00::/8."
+	if((pAddr->sin_family == AF_INET6)) {
+		if(pAddr->sin_addr.S_un.bIPv6Data[0] == 0xFF)
+			return TRUE;
     }
 #endif
 	return FALSE;

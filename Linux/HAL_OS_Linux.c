@@ -21,6 +21,9 @@
 #include <time.h>
 #include <semaphore.h>
 #include <errno.h>
+#include <termios.h>
+#include <fcntl.h>
+
 
 
 
@@ -32,7 +35,7 @@ void GURU_Init(void)
 const char *GURU_GetPlatformInfo(GURU_PLATFORMINFO eInfoType)
 {
 	static char pszCompilerString[30];
-	static char pszKernelString[120];
+	static char pszKernelString[200];
 	static char pszNumCores[100];
 	static struct utsname un;
 	int ret;
@@ -326,7 +329,7 @@ QUEUE_HANDLE GURU_CreateQueue(DWORD dwMaxCount)
 	pQueue->hLock = GURU_CreateSemaphore(1);
 	pQueue->nMessages = 0;
 	pQueue->dwMaxCount = dwMaxCount;
-	pQueue->pData = malloc(dwMaxCount*4*sizeof(DWORD));
+	pQueue->pData = malloc(dwMaxCount*4*sizeof(HAL_QUEUE_MSGTYPE));
 	assert(pQueue->pData);
 	if(!pQueue->pData) {
 		free(pQueue);
@@ -335,7 +338,7 @@ QUEUE_HANDLE GURU_CreateQueue(DWORD dwMaxCount)
 	return pQueue;
 }
 
-int GURU_QueueRecv(QUEUE_HANDLE hQueue, DWORD msg[4], DWORD dwWaitTicks)
+int GURU_QueueRecv(QUEUE_HANDLE hQueue, HAL_QUEUE_MSGTYPE msg[4], DWORD dwWaitTicks)
 {
 	assert(hQueue);
 	assert(hQueue->hLock);
@@ -357,18 +360,18 @@ int GURU_QueueRecv(QUEUE_HANDLE hQueue, DWORD msg[4], DWORD dwWaitTicks)
 	msg[2] = hQueue->pData[2];
 	msg[3] = hQueue->pData[3];
 	hQueue->nMessages--;
-	memmove(hQueue->pData,&hQueue->pData[4],4*hQueue->nMessages*sizeof(DWORD));
+	memmove(hQueue->pData,&hQueue->pData[4],4*hQueue->nMessages*sizeof(HAL_QUEUE_MSGTYPE));
 	//UART_printf("Received (rem %d) %d %d %d %d\r\n",hQueue->nMessages,msg[0],msg[1],msg[2],msg[3]);
 	GURU_SemaphoreRelease(hQueue->hLock);
 	return GURU_QUEUE_OK;
 }
 
-int GURU_QueueTryRecv(QUEUE_HANDLE hQueue,DWORD msg[4])
+int GURU_QueueTryRecv(QUEUE_HANDLE hQueue,HAL_QUEUE_MSGTYPE msg[4])
 {
 	return GURU_QueueRecv(hQueue, msg, 0);	
 }
 
-int GURU_QueueSend(QUEUE_HANDLE hQueue, const DWORD msg[4])
+int GURU_QueueSend(QUEUE_HANDLE hQueue, const HAL_QUEUE_MSGTYPE msg[4])
 {
 	GURU_SemaphoreWait(hQueue->hLock, GURU_SEMAPHORE_WAIT_INFINITE);
 	if(hQueue->nMessages == hQueue->dwMaxCount) {
@@ -424,7 +427,7 @@ const char *GURU_GetKernelCMDLine(void)
 	if(g_pszKernelCmdLine[0])
 		return g_pszKernelCmdLine;
 	memset(g_pszKernelCmdLine, 0x00, MAX_KERNEL_CMDLINE+1);
-	FILE_HANDLE hCmdLine = FSYS_Open("/proc/cmdline", FALSE);
+	FILE_HANDLE hCmdLine = FSYS_Open("/proc/cmdline", FSYS_READONLY);
 	assert(hCmdLine != INVALID_FILE_HANDLE);
 	if(hCmdLine) {
 		int nRead;

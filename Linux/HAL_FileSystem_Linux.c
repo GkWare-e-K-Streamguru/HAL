@@ -32,22 +32,34 @@ FAILRELEASEBUILD
 #define O_BINARY 0
 
 
-FILE_HANDLE FSYS_Open(const char *pszFName, BOOL fWriteAccess)
+FILE_HANDLE FSYS_Open(const char *pszFName, FSYS_OPEN_MODE eOpenMode)
 {
 	int hFile;
 	assert(pszFName);
 
-	FSYS_DEBUG(("FSYS_Open %s WriteMode%d\r\n", pszFName, fWriteAccess));
+	FSYS_DEBUG(("FSYS_Open %s WriteMode%d\r\n", pszFName, eOpenMode));
 
-	if(fWriteAccess)
-		hFile = open(pszFName, O_RDWR | O_CREAT/* | O_TRUNC */| O_BINARY, S_IREAD | S_IWRITE);
-	else
+
+	switch(eOpenMode)
+	{
+	case FSYS_READONLY:
 		hFile = open(pszFName, O_RDONLY | O_BINARY);
+		break;
+	case FSYS_READWRITE:
+		hFile = open(pszFName, O_RDWR | O_CREAT | O_TRUNC | O_BINARY, S_IREAD | S_IWRITE);
+		break;
+	case FSYS_APPEND:
+		hFile = open(pszFName, O_RDWR | O_CREAT | O_APPEND | O_BINARY, S_IREAD | S_IWRITE);
+		break;
+	default:
+		assert(0);
+		return INVALID_FILE_HANDLE;
+	}
 
 	if(hFile == -1)
 		return INVALID_FILE_HANDLE;
 
-	FSYS_DEBUG(("FSYS_Open %s WriteMode%d = handle %d\r\n", pszFName, fWriteAccess, (int)hFile));
+	FSYS_DEBUG(("FSYS_Open %s WriteMode%d = handle %d\r\n", pszFName, eOpenMode, (int)hFile));
 	return (FILE_HANDLE)hFile;
 }
 
@@ -232,7 +244,7 @@ BOOL FSYS_FindNextDirEntry(FS_FINDFILE_HANDLE hFind, FSYS_FINDFILE_INFO *pInfo)
 // 		};
 	struct stat s;
 
-	char pszFullPath[MAX_PATH+1];
+	char pszFullPath[2*MAX_PATH];
 	assert(strlen(pFind->pszDir)+strlen(pInfo->pszFName) <= MAX_PATH);
 	if(strlen(pFind->pszDir)+strlen(pInfo->pszFName) > MAX_PATH)
 		return FALSE;

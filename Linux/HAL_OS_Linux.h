@@ -177,12 +177,22 @@ void GURU_Mutex_Delete(MUTEX_HANDLE *pMutex);
 
 ///////////////////////////////////////////////////////
 // Queues
+#ifdef __i386__
+typedef DWORD HAL_QUEUE_MSGTYPE;
+#elif __amd64__
+typedef QWORD HAL_QUEUE_MSGTYPE;
+#elif __mips__
+typedef DWORD HAL_QUEUE_MSGTYPE;
+#else
+#error
+#endif
+
 
 typedef struct {
 	SEMAPHORE_HANDLE hLock;
 	SEMAPHORE_HANDLE hMsgSema;
 	int nMessages;
-	DWORD *pData;
+	HAL_QUEUE_MSGTYPE *pData;
 	DWORD dwMaxCount;
 } LINUXQUEUE;
 
@@ -210,7 +220,7 @@ QUEUE_HANDLE GURU_CreateQueue(DWORD dwMaxCount);
 //! @return The numerical values of these constants are platform dependent:
 //!         - GURU_QUEUE_OK A message arrived and has been placed into the msg buffer
 //!         - GURU_QUEUE_TIMEOUT The receive operation timed out
-int GURU_QueueRecv(QUEUE_HANDLE hQueue, DWORD msg[4], DWORD dwWaitTicks);
+int GURU_QueueRecv(QUEUE_HANDLE hQueue, HAL_QUEUE_MSGTYPE msg[4], DWORD dwWaitTicks);
 
 
 //! GURU_QueueRecv tries to receive a message from a queue.
@@ -219,7 +229,7 @@ int GURU_QueueRecv(QUEUE_HANDLE hQueue, DWORD msg[4], DWORD dwWaitTicks);
 //! @return The numerical values of these constants are platform dependent:
 //!         - GURU_QUEUE_OK A message arrived and has been placed into the msg buffer
 //!         - GURU_QUEUE_EMPTY The queue is empty
-int GURU_QueueTryRecv(QUEUE_HANDLE hQueue,DWORD msg[4]);
+int GURU_QueueTryRecv(QUEUE_HANDLE hQueue,HAL_QUEUE_MSGTYPE msg[4]);
 
 //! GURU_QueueRecv sends a message to a queue.
 //! @param hQueue A valid queue handle
@@ -227,7 +237,7 @@ int GURU_QueueTryRecv(QUEUE_HANDLE hQueue,DWORD msg[4]);
 //! @return The numerical values of these constants are platform dependent:
 //!			- GURU_QUEUE_OK The message was sent successfully
 //!         - GURU_QUEUE_FULL The queue is full. The message was not sent.
-int GURU_QueueSend(QUEUE_HANDLE hQueue, const DWORD msg[4]);
+int GURU_QueueSend(QUEUE_HANDLE hQueue, const HAL_QUEUE_MSGTYPE msg[4]);
 
 //! GURU_QueueDelete deletes a queue that has been allocated using GURU_CreateQueue().
 //! No tasks should be waiting in GURU_QueueRecv for the handle when this function is called.
@@ -264,6 +274,17 @@ const char *GURU_GetKernelCMDLine(void);
 //! The OS time influences timestamps on files written to attached media devices.
 //! @param t The time to set as new system time.
 void GURU_SetOSTime(time_t t);
+
+
+//! GURU_GenerateRandom tries to obtain from a hardware random source or an operating-system supplied mechanism.
+//! Data produced by this function should be safe to use for cryptographic purposes.
+//! The function must fail (return FALSE) if insufficient entropy is available or the RNG hardware fails.
+//! Incorrect implementation of this function can lead to severe cryptography problems.
+//! @param pOut Pointer to the buffer that should be filled with random data.
+//! @param size The number of bytes to write.
+//! @return TRUE if the requested number of random bytes was written, FALSE in any other case.
+BOOL GURU_GenerateRandom(BYTE *pOut, size_t size);
+
 
 #ifdef __cplusplus
 }
